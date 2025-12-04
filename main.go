@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -24,7 +27,6 @@ func worker(id int, tasks <-chan Task, results chan<- string, logger *slog.Logge
 	}
 }
 
-// Keyboard input goroutine
 func keyboardInput(results chan<- string, logger *slog.Logger, wg *sync.WaitGroup) {
 	defer wg.Done()
 	scanner := bufio.NewScanner(os.Stdin)
@@ -39,7 +41,6 @@ func keyboardInput(results chan<- string, logger *slog.Logger, wg *sync.WaitGrou
 	}
 }
 
-// File input goroutine
 func fileInput(filename string, results chan<- string, logger *slog.Logger, wg *sync.WaitGroup) {
 	defer wg.Done()
 	file, err := os.Open(filename)
@@ -50,7 +51,7 @@ func fileInput(filename string, results chan<- string, logger *slog.Logger, wg *
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
-			logger.Error("Failed to defer file to closing", "error", err)
+			logger.Error("Failed to close file", "error", err)
 		}
 	}(file)
 
@@ -98,10 +99,57 @@ func main() {
 		close(results)
 	}()
 
-	// Consume results
-	for msg := range results {
-		logger.Info(msg)
-	}
+	// Timer
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
 
-	logger.Info("All sources finished.")
+	// Signal channel (Ctrl+C or kill)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// Network listener (demo)
+	ln, _ := net.Listen("tcp", ":8080")
+	connCh := make(chan net.Conn)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				continue
+			}
+			connCh <- conn
+		}
+	}()
+
+	// Unified event loop
+	for {
+		select {
+		case <-ticker.C:
+			fmt.Println("Timer tick")
+		case sig := <-sigCh:
+			fmt.Println("Signal received:", sig)
+			logger.Info("Nano-app exiting gracefully due to signal")
+			return
+		case conn := <-connCh:
+			fmt.Println("Network connection:", conn.RemoteAddr(), "→", conn.LocalAddr())
+
+			body := "Hello from nano-app!\n"
+			response := "HTTP/1.1 200 OK\r\n" +
+				"Content-Type: text/plain\r\n" +
+				fmt.Sprintf("Content-Length: %d\r\n", len(body)) +
+				"\r\n" +
+				body
+
+			_, err := conn.Write([]byte(response))
+			if err != nil {
+				logger.Error("Failed to send feedback", "error", err)
+			}
+			//conn.Close()
+		case msg, ok := <-results:
+			if !ok {
+				logger.Info("All sources finished.")
+				return
+			}
+			fmt.Println("Worker result:", msg)
+		}
+	}
 }
