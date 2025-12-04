@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -107,18 +106,17 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	// Network listener (demo)
-	ln, _ := net.Listen("tcp", ":8080")
-	connCh := make(chan net.Conn)
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				continue
-			}
-			connCh <- conn
-		}
-	}()
+	// Network listeners
+	listener1, err := StartListener(8080)
+	if err != nil {
+		logger.Error("Failed to start listener1", "error", err)
+		return
+	}
+	listener2, err := StartListener(9090)
+	if err != nil {
+		logger.Error("Failed to start listener2", "error", err)
+		return
+	}
 
 	// Unified event loop
 	for {
@@ -129,21 +127,14 @@ func main() {
 			fmt.Println("Signal received:", sig)
 			logger.Info("Nano-app exiting gracefully due to signal")
 			return
-		case conn := <-connCh:
+		case conn := <-listener1.ConnCh:
 			fmt.Println("Network connection:", conn.RemoteAddr(), "→", conn.LocalAddr())
+			WriteHTTPResponse(conn, "Hello from nano-app on port 8080!\n", logger)
 
-			body := "Hello from nano-app!\n"
-			response := "HTTP/1.1 200 OK\r\n" +
-				"Content-Type: text/plain\r\n" +
-				fmt.Sprintf("Content-Length: %d\r\n", len(body)) +
-				"\r\n" +
-				body
+		case conn := <-listener2.ConnCh:
+			fmt.Println("Network connection:", conn.RemoteAddr(), "→", conn.LocalAddr())
+			WriteHTTPResponse(conn, "Hello from nano-app on port 9090!\n", logger)
 
-			_, err := conn.Write([]byte(response))
-			if err != nil {
-				logger.Error("Failed to send feedback", "error", err)
-			}
-			//conn.Close()
 		case msg, ok := <-results:
 			if !ok {
 				logger.Info("All sources finished.")
