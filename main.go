@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"go-hello/logger"
+	"log/slog"
+	"os"
 	"runtime"
 	"time"
 )
@@ -14,30 +15,39 @@ type Task struct {
 	payload string
 }
 
-func worker(id int, tasks <-chan Task, results chan<- string) {
+func worker(id int, tasks <-chan Task, results chan<- string, logger *slog.Logger) {
 	for task := range tasks {
 		msg := fmt.Sprintf("[Worker %d] processing Task %d (%s) | CPUs: %d | Goroutines: %d",
 			id, task.id, task.payload, cpuCount, runtime.NumGoroutine())
 		time.Sleep(500 * time.Millisecond)
 		results <- msg
-		logger.Info(fmt.Sprintf("Worker %d finished Task %d", id, task.id))
+		logger.Info("Task finished",
+			"worker", id,
+			"taskID", task.id,
+			"payload", task.payload,
+		)
 	}
 }
 
 func main() {
-	logger.Info("=== Producer–Consumer Cycle Started ===")
-	logger.Info(fmt.Sprintf("CPUs: %d | Goroutines: %d", cpuCount, runtime.NumGoroutine()))
+	// Create a JSON logger writing to stdout
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	logger.Info("Producer–Consumer Cycle Started",
+		"cpus", cpuCount,
+		"goroutines", runtime.NumGoroutine(),
+	)
 
 	tasks := make(chan Task, 5)
 	results := make(chan string, 5)
 
 	for i := 1; i <= 3; i++ {
-		go worker(i, tasks, results)
+		go worker(i, tasks, results, logger)
 	}
 
 	for i := 1; i <= 6; i++ {
 		tasks <- Task{id: i, payload: fmt.Sprintf("payload-%d", i)}
-		logger.Info(fmt.Sprintf("Produced Task %d", i))
+		logger.Info("Produced task", "taskID", i)
 	}
 	close(tasks)
 
