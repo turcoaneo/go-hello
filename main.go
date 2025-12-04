@@ -17,7 +17,7 @@ type Task struct {
 func worker(id int, tasks <-chan Task, results chan<- string, logger *slog.Logger, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for task := range tasks {
-		time.Sleep(500 * time.Millisecond) // simulate heavy load
+		time.Sleep(5000 * time.Millisecond) // simulate heavy load
 		msg := fmt.Sprintf("[Worker %d] processed Task %d (%s)", id, task.id, task.payload)
 		results <- msg
 		logger.Info("Worker finished", "worker", id, "taskID", task.id)
