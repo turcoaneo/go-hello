@@ -6,15 +6,13 @@ import (
 	"time"
 )
 
-// Global variable holding CPU count
 var cpuCount = runtime.NumCPU()
 
-func worker(id int) {
-	fmt.Printf("[Worker %d] CPUs: %d | Goroutines: %d\n",
-		id, cpuCount, runtime.NumGoroutine())
-
+func worker(id int, ch chan string) {
 	for i := 0; i < 3; i++ {
-		fmt.Printf("[Worker %d] iteration %d\n", id, i)
+		msg := fmt.Sprintf("[Worker %d] CPUs: %d | Goroutines: %d | iteration %d",
+			id, cpuCount, runtime.NumGoroutine(), i)
+		ch <- msg // send message into channel
 		time.Sleep(400 * time.Millisecond)
 	}
 }
@@ -23,17 +21,17 @@ func main() {
 	fmt.Println("=== System Info at Start ===")
 	fmt.Printf("CPUs: %d | Goroutines: %d\n", cpuCount, runtime.NumGoroutine())
 
+	ch := make(chan string)
+
 	// Launch workers
 	for i := 1; i <= 3; i++ {
-		go worker(i)
+		go worker(i, ch)
 	}
 
-	// Print after spawning
-	time.Sleep(100 * time.Millisecond)
-	fmt.Printf("After spawning workers: CPUs: %d | Goroutines: %d\n",
-		cpuCount, runtime.NumGoroutine())
+	// Collect results
+	for i := 0; i < 9; i++ { // 3 iterations × 3 workers
+		fmt.Println(<-ch) // receive from channel
+	}
 
-	// Keep main alive
-	time.Sleep(2 * time.Second)
 	fmt.Println("All goroutines finished.")
 }
