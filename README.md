@@ -1,0 +1,1 @@
+# GO simple project
