@@ -30,8 +30,14 @@ func worker(id int, tasks <-chan Task, results chan<- string, logger *slog.Logge
 }
 
 func main() {
-	// Create a JSON logger writing to stdout
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	// Choose handler based on config
+	var logger *slog.Logger
+	if //goland:noinspection GoBoolExpressions
+	useJSONLogging {
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	} else {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+	}
 
 	logger.Info("Producer–Consumer Cycle Started",
 		"cpus", cpuCount,
